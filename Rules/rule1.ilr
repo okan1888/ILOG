@@ -1,0 +1,103 @@
+
+/**********************************************************************
+ *   Rule1 AC POWER ALARM
+ *
+ *
+ *
+ *********************************************************************/
+
+/**
+ *
+ *EXTERNAL_ALARM
+ *
+ */
+
+rule BTS_EXTERNAL_AC_FAILURE_ALARM
+{
+    packet = RULE10PLUS;
+    priority = high;
+    property activation = true;
+
+    when{
+                 ?acAlarm: TeMIPAlarmObjectUser(
+                     ruleState == NOT_TRANSIENT;
+                     LABSpecificProblem == RADIO_X_CEIVER_ADMINISTRATION_BTS_EXTERNAL_FAULT || LABSpecificProblem == RADIO_X_CEIVER_ADMINISTRATION_MANAGED_OBJECT_FAULT;
+                     LABAlarmSlogan == AC_FAILURE || LABAlarmSlogan == MAINS_FAILURE;
+                     isRuleActive(10);
+                     !isHandledByRule10;
+                     !isHandledByRule38;  
+                     !cleared;
+                     !isOld;
+                     !severity.equals(SEVERITY.CLEAR)
+                      );
+           set: EXPCall(verbName.equals("set"));  // retrieve the global EXPCal
+    }
+    then
+        {
+                 modify refresh ?acAlarm {
+                 isHandledByRule38 = true;       //This will fire second part
+                 }
+                 showAlarm(?acAlarm, set);
+        }
+};
+
+rule OPERATOR_CONDITION
+{
+ packet = RULE10PLUS;
+ property activation = true;
+    when
+        {
+
+                ?a: TeMIPAlarmObjectUser(
+                     ruleState == NOT_TRANSIENT;
+                     LABSpecificProblem == RADIO_X_CEIVER_ADMINISTRATION_MANAGED_OBJECT_FAULT;
+                     ((LABAlarmSlogan != AC_FAILURE) && (LABAlarmSlogan != MAINS_FAILURE) || isHandledByRule38);
+                     isRuleActive(10);
+                     !isOld;
+                     findString("OPERATOR CONDITION");
+                     !findString("OIE_2.4:");
+                     !severity.equals(SEVERITY.CLEAR)
+                     );
+        }
+    then{
+        ?a.safeAdditionalText = "OIE_2.4: " + ?a.safeAdditionalText;
+        bind ?CreateTT6 = "manage create tt x selected alarms " + ?a.ocName.toString() + "  " + ?a.id.toString();
+        ?a.cmdexec(?CreateTT6);
+        ?a.safeUserText = "OUTDOOR DOOR OPENED (R#17)" + ?a.safeUserText + " (R#TT_2)"; 
+        //showAlarm(?a,?set);
+        //retract ?a;
+   }
+};
+
+
+rule RADIO_X_CEIVER_ADMINISTRATION_BTS
+{
+    packet = RULE10PLUS;
+    property activation = true;
+    when{
+                 externalAlarm: TeMIPAlarmObjectUser( 
+                     ruleState == NOT_TRANSIENT; 
+                     LABSpecificProblem == RADIO_X_CEIVER_ADMINISTRATION_BTS_EXTERNAL_FAULT;
+                     (isHandledByRule38 || (LABAlarmSlogan != AC_FAILURE) && (LABAlarmSlogan != MAINS_FAILURE));   
+ 	             isRuleActive(10);
+                     !isHandledByRule10;  
+   		     !isHidden;
+		     !cleared;
+		     !deleted;
+                     !isOld;
+		     !severity.equals(SEVERITY.CLEAR)
+                 );
+    }
+
+    then
+	{
+        bind ?newusertext = externalAlarm.extractAlarmTypeCheckText("/var/opt/expertdata/configFiles/ConFileRadioxceiverAlarmTypeCritical","/var/opt/expertdata/configFiles/ConFileRadioxceiverAlarmTypeMajor");      
+		System.out.println("RULE#10 AlarmId = " + externalAlarm.id.toString() + ", newusertext= " + ?newusertext);
+		externalAlarm.safeUserText =  ?newusertext + " (R#10)";
+        modify refresh externalAlarm{
+                                isHandledByRule10 = true;                 
+                         }
+        } 
+};
+
+

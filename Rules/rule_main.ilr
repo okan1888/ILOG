@@ -1,0 +1,230 @@
+import temip.expert.*;
+import java.lang.*;
+import user_model.*;
+import ilog.rules.engine.*;
+import temip_entity_user.*;
+
+ruleset user_rules
+{
+property context.class = user_model.TemipExpertContextUser;
+};
+
+
+setup
+{
+  
+   assert EXPCall("SetOpNote","set", "", "", EXPCallRunMode.SYNCHRONOUS);
+
+	System.out.println("Starting OC_monitoring");   
+    
+
+startMonitoringOC("LAB_OC");
+
+      
+};
+
+
+//Method to get the Expert OC name
+//this is the OC used to send List alarms to.
+function String getExpertOCName(){
+	return "OC_EXPERT"; 
+}
+
+
+
+/**
+ *   hideTransientAlarm
+ *  Build and make the call to set the operator note
+
+ */
+function void hideTransientAlarm(TeMIPAlarmObjectUser alarm, EXPCall setCall){
+   if(!alarm.isHidden){
+        trace(0,alarm,"HIDING ONE ALARM = " +alarm.id.toString());
+        alarm.setHideString();
+        alarm.ruleState =  TeMIPAlarmObjectUser.TRANSIENT_WAITING;
+        alarm.isHidden = true;
+    }
+   
+}
+
+function void hideAlarm(TeMIPAlarmObjectUser alarm, EXPCall setCall){
+    if(!alarm.isHidden){
+	trace(0,alarm,"HIDING ONE ALARM = " +alarm.id.toString());
+        modify alarm {  setHideString();
+		    isHidden = true;}
+    }
+}
+
+function void showAlarm(TeMIPAlarmObjectUser alarm, EXPCall setCall ){
+   if(alarm.isHidden){
+        trace(0,alarm,"***UNHIDING ONE ALARM = " +alarm.id.toString());
+        modify alarm{ removeHideString();
+    		  isHidden = false;}
+   }
+}
+
+
+rule Transient_hide
+{
+    packet = Transient;
+    property activation = true;
+   
+    when
+	{ 
+		?a: TeMIPAlarmObjectUser(
+                     !additionalText.equals("Test Alarmi SNMP Reachability Down");   
+                     !isOld;
+		     LABSpecificProblem != SP_UNDEFINED ;
+		     ruleState == SEND_TO_TRANSIENT_FILTER;
+		    !severity.equals(SEVERITY.CLEAR));
+		    
+
+		?set: EXPCall(verbName.equals("set"));
+     	
+	}
+    then{
+	    System.out.println("\nTransient Rule is trigging\n");
+	    hideTransientAlarm(?a,?set);
+            update refresh ?a;  
+        }
+};
+
+
+rule  Transient_Timer
+{
+    packet = Transient;
+    property activation = true;
+
+    when{
+           
+	
+	    ?a1: TeMIPAlarmObjectUser(
+		LABSpecificProblem != SP_UNDEFINED;
+		ruleState == TeMIPAlarmObjectUser.TRANSIENT_WAITING;
+	        !severity.equals(SEVERITY.CLEAR)
+		);
+
+	     ?set: EXPCall(verbName.equals("set"));  // retrieve the global EXPCall
+
+	  ?theWait: wait logical ?a1.transientWaitingTime
+		 {// If there is a clearance within 30 minutes. Note The Notification Identifier is checked!
+		     TeMIPAlarmObjectUser(?this == ?a1;
+		                        cleared );
+		 }		
+    }
+    then
+	{ 
+           //----------------------------------------------------------------------------
+           // TIME IN: A Clearance has occurred within 30 min => AO is terminated
+	   //---------------------------------------------------------------------------- 
+            System.out.println(?a1.notificationIdentifier.toString() + " Was  Cleared " );
+             modify ?a1 {
+	     	safeUserText = safeUserText + "R#0: Transient";
+	     	ruleState = TeMIPAlarmObjectUser.TRANSIENT;
+	     }
+	     showAlarm(?a1,?set);
+	     ?a1.Terminate();
+	     retract ?a1;
+ 
+            //--------------------------------------------------------------------------
+	    // TIME OUT: No Clearance received within the time
+            //--------------------------------------------------------------------------
+	     timeout ?theWait
+		 {
+		     //showAlarm(?a1);
+		     //System.out.println("Timer timed out for" + ?a1);
+		     modify ?a1 {ruleState = TeMIPAlarmObjectUser.NOT_TRANSIENT;}
+		     update refresh ?a1;
+		 }
+            update refresh ?a1;
+	}
+};
+
+rule handleOldAlarms{
+    packet = main;
+    property activation = true;
+
+    when{
+	  
+		?teMIPAlarm1: TeMIPAlarmObjectUser(
+		     isOld == true;
+		     !isIMAAlarm;
+		     !isAdminAO;
+                     LABSpecificProblem != SP_UNDEFINED;
+		     LABSpecificProblem != MO_FAULT_LIST_ALARM; //Reuse old listalams
+		     LABSpecificProblem != EXTERNAL_ALARM //Ignore External Alarms
+		);
+    }
+    then{
+        System.out.println("Rule handleOldAlarms Handling one alarm");
+        if (?teMIPAlarm1.LABSpecificProblem == TeMIPAlarmObjectUser.CELL_LOGICAL_CHANNEL_AVAILABILITY_SUPERVISION){
+                ?teMIPAlarm1.removeHideString();
+		update ?teMIPAlarm1;
+	}
+  
+	else {
+		?teMIPAlarm1.removeHideString();
+		update ?teMIPAlarm1;
+        	retract ?teMIPAlarm1;
+        }
+    }
+}
+
+rule RetractUnInterrestingAlarm{
+    
+    packet = main;
+    property activation = true;
+
+    when{
+	  
+		alarm: TeMIPAlarmObjectUser(
+		     LABSpecificProblem == SP_UNDEFINED;
+		     isIMAAlarm == false;
+		     !isAdminAO;
+		     !isIMAAlarm;
+		);
+    }
+    then{
+	if(alarm.additionalText.equals("EXPERT SYSTEM -COMMAND: RELOAD CONFIGURATION FROM FILE")){
+		alarm.Terminate();
+		reloadConfiguration();
+	}else if(alarm.additionalText.equals("EXPERT SYSTEM -COMMAND: RELOAD DIP DATA FROM FILE")){
+		alarm.Terminate();
+		reloadDIPData();
+		
+	}else if(alarm.additionalText.equals("EXPERT SYSTEM -COMMAND: RELOAD SUBCONTRACTOR DATA FROM FILE")){
+		alarm.Terminate();
+		reloadSubContractorData();
+	}
+
+
+
+    }
+
+}
+
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
