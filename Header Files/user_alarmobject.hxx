@@ -177,7 +177,6 @@ public:
     void gotDXXCircuitName();
 
     RWCString getCellName();
-    RWCString getTarih();
     RWCString getBTSName();
 
     bool _isGPRSAO;
