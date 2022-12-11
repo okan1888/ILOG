@@ -14,7 +14,7 @@
 
 rule BTS_EXTERNAL_AC_FAILURE_ALARM
 {
-    packet = RULE10PLUS;
+    packet = RULE1;
     priority = high;
     property activation = true;
 
@@ -23,9 +23,8 @@ rule BTS_EXTERNAL_AC_FAILURE_ALARM
                      ruleState == NOT_TRANSIENT;
                      LABSpecificProblem == RADIO_X_CEIVER_ADMINISTRATION_BTS_EXTERNAL_FAULT || LABSpecificProblem == RADIO_X_CEIVER_ADMINISTRATION_MANAGED_OBJECT_FAULT;
                      LABAlarmSlogan == AC_FAILURE || LABAlarmSlogan == MAINS_FAILURE;
-                     isRuleActive(10);
-                     !isHandledByRule10;
-                     !isHandledByRule38;  
+                     isRuleActive(1);
+                     !isHandledByRule1;
                      !cleared;
                      !isOld;
                      !severity.equals(SEVERITY.CLEAR)
@@ -43,7 +42,7 @@ rule BTS_EXTERNAL_AC_FAILURE_ALARM
 
 rule OPERATOR_CONDITION
 {
- packet = RULE10PLUS;
+ packet = RULE1;
  property activation = true;
     when
         {
@@ -52,7 +51,7 @@ rule OPERATOR_CONDITION
                      ruleState == NOT_TRANSIENT;
                      LABSpecificProblem == RADIO_X_CEIVER_ADMINISTRATION_MANAGED_OBJECT_FAULT;
                      ((LABAlarmSlogan != AC_FAILURE) && (LABAlarmSlogan != MAINS_FAILURE) || isHandledByRule38);
-                     isRuleActive(10);
+                     isRuleActive(1);
                      !isOld;
                      findString("OPERATOR CONDITION");
                      !findString("OIE_2.4:");
@@ -72,15 +71,15 @@ rule OPERATOR_CONDITION
 
 rule RADIO_X_CEIVER_ADMINISTRATION_BTS
 {
-    packet = RULE10PLUS;
+    packet = RULE1;
     property activation = true;
     when{
                  externalAlarm: TeMIPAlarmObjectUser( 
                      ruleState == NOT_TRANSIENT; 
                      LABSpecificProblem == RADIO_X_CEIVER_ADMINISTRATION_BTS_EXTERNAL_FAULT;
                      (isHandledByRule38 || (LABAlarmSlogan != AC_FAILURE) && (LABAlarmSlogan != MAINS_FAILURE));   
- 	             isRuleActive(10);
-                     !isHandledByRule10;  
+ 	             isRuleActive(1);
+                     !isHandledByRule1;  
    		     !isHidden;
 		     !cleared;
 		     !deleted;
@@ -91,12 +90,12 @@ rule RADIO_X_CEIVER_ADMINISTRATION_BTS
 
     then
 	{
-        bind ?newusertext = externalAlarm.extractAlarmTypeCheckText("/var/opt/expertdata/configFiles/ConFileRadioxceiverAlarmTypeCritical","/var/opt/expertdata/configFiles/ConFileRadioxceiverAlarmTypeMajor");      
-		System.out.println("RULE#10 AlarmId = " + externalAlarm.id.toString() + ", newusertext= " + ?newusertext);
-		externalAlarm.safeUserText =  ?newusertext + " (R#10)";
+        bind ?newusertext = externalAlarm.extractAlarmTypeCheckText("/var/opt/expertdata/ConFileRadioxceiverAlarmTypeCritical","/var/opt/expertdata/ConFileRadioxceiverAlarmTypeMajor");      
+	System.out.println("RULE#10 AlarmId = " + externalAlarm.id.toString() + ", newusertext= " + ?newusertext);
+	externalAlarm.safeUserText =  ?newusertext + " (R#10)";
         modify refresh externalAlarm{
-                                isHandledByRule10 = true;                 
-                         }
+        	isHandledByRule10 = true;                 
+         }
         } 
 };
 
